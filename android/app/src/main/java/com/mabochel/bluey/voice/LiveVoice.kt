@@ -100,6 +100,8 @@ class LiveVoice(context: Context) {
     private var toolsRunning = 0
     private var failedConnects = 0
     private var sessionStarted = false
+    /** Bumped on every sleep, so token replies and retries from an earlier wake are ignored. */
+    private var generation = 0
 
     private fun moveTo(new: State) {
         if (new == state) return
@@ -135,9 +137,10 @@ class LiveVoice(context: Context) {
         }
         micRunning = true
         val requestToken = requestToken ?: run { sleep(); return }
+        val wake = generation
         requestToken { token ->
             main.post {
-                if (state != State.Waking) return@post
+                if (wake != generation || state != State.Waking) return@post
                 if (token == null) {
                     feedback = "Voice could not connect. Check the Mac and OpenAI key."
                     onCaption?.invoke(feedback, true); sleep(); return@post
@@ -149,6 +152,7 @@ class LiveVoice(context: Context) {
 
     fun sleep() {
         val wasRunning = wantAwake || socket != null
+        generation++
         wantAwake = false
         reconnecting = false
         if (wasRunning) onSessionEnd?.invoke()
@@ -281,6 +285,12 @@ class LiveVoice(context: Context) {
                 main.post { closed(webSocket) }
             }
 
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                // The server ended the session (e.g. its time limit): finish the close and reconnect now.
+                webSocket.close(1000, null)
+                main.post { closed(webSocket) }
+            }
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 main.post { closed(webSocket) }
             }
@@ -303,7 +313,8 @@ class LiveVoice(context: Context) {
             else -> {
                 socket = null
                 socketReady = false
-                main.postDelayed({ if (wantAwake && socket == null) reconnect() }, failedConnects * 2000L)
+                val wake = generation
+                main.postDelayed({ if (wake == generation && wantAwake && socket == null) reconnect() }, failedConnects * 2000L)
             }
         }
     }
@@ -318,11 +329,13 @@ class LiveVoice(context: Context) {
         val requestToken = requestToken
         if (!wantAwake || requestToken == null) return
         reconnecting = true
+        val wake = generation
         requestToken { token ->
             main.post {
-                if (!wantAwake || socket != null) return@post
+                if (wake != generation || !wantAwake || socket != null) return@post
                 if (token != null) connect(token)
-                else main.postDelayed({ reconnect(attempt + 1) }, (min(30.0, 2 + attempt * 3.0) * 1000).toLong())
+                else main.postDelayed({ if (wake == generation) reconnect(attempt + 1) },
+                    (min(30.0, 2 + attempt * 3.0) * 1000).toLong())
             }
         }
     }

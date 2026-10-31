@@ -51,12 +51,16 @@ class LineConnection(
     fun send(packet: Packet) {
         if (!authenticated || closed.get()) return
         val channel = channel ?: return
-        writer.execute {
-            try {
-                writeLine(channel.seal(packet))
-            } catch (e: Exception) {
-                cancel("Send failed: ${e.message}")
+        try {
+            writer.execute {
+                try {
+                    writeLine(channel.seal(packet))
+                } catch (e: Exception) {
+                    cancel("Send failed: ${e.message}")
+                }
             }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            // The link closed a moment ago; the packet has nowhere to go.
         }
     }
 
