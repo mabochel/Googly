@@ -319,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                 action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
-        menu.addItem(item("Pair iPhone (QR)…", #selector(pairPhone)))
+        menu.addItem(item("Pair Phone (QR)…", #selector(pairPhone)))
         if let session = focus.current, session.status != .ended {
             let title = NSMenuItem(title: "Focus: \(session.task) · \(FocusSession.clock(session.remaining))", action: nil, keyEquivalent: "")
             title.isEnabled = false; menu.addItem(title)

@@ -36,7 +36,7 @@ final class PairingPanel {
         let title = NSTextField(labelWithString: "Your little focus friend")
         title.font = .systemFont(ofSize: 23, weight: .semibold); title.alignment = .center
         title.frame = CGRect(x: 20, y: 452, width: 400, height: 32); panel.contentView?.addSubview(title)
-        let copy = NSTextField(wrappingLabelWithString: "On your iPhone, open Bluey and tap Pair Mac to scan this code. Keep the code private: it pairs your phone to this Mac.\n\nDuring focus sessions, your main display is shared with OpenAI every 30 seconds. No screenshots are saved by Bluey. Pause or end to stop sharing.")
+        let copy = NSTextField(wrappingLabelWithString: "On your iPhone or Android phone, open Bluey and tap Pair Mac to scan this code. Keep the code private: it pairs your phone to this Mac.\n\nDuring focus sessions, your main display is shared with OpenAI every 30 seconds. No screenshots are saved by Bluey. Pause or end to stop sharing.")
         copy.font = .systemFont(ofSize: 13); copy.frame = CGRect(x: 30, y: 20, width: 380, height: 124)
         panel.contentView?.addSubview(copy)
         self.panel = panel; panel.center(); panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)

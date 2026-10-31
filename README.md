@@ -1,11 +1,15 @@
 # Bluey
 
+> **Android:** this fork of [rbrown101010/bluey-by-riley](https://github.com/rbrown101010/bluey-by-riley) adds an
+> Android phone app in [`android/`](android/README.md). It pairs with the same Mac app and does everything the iPhone
+> app does. Wherever this README says iPhone, an Android phone works too; the Mac menu item is now **Pair Phone (QR)…**.
+
 Bluey is a little blueberry focus friend. Keep your iPhone sideways under your Mac monitor: his eyes follow your mouse, and his matching blue cursor appears when he has something to point out. Same character, animation, British personality, speech bubbles and cartoon chirp. No spoken voice output and no glow.
 
 ## Start focusing
 
 1. Run Bluey on your Mac and iPhone on the same local network.
-2. On Mac, choose **Pair iPhone (QR)…** from Bluey's menu. On iPhone choose **Pair Mac**, then scan the code. Treat this code as a private pairing credential.
+2. On Mac, choose **Pair Phone (QR)…** from Bluey's menu. On the phone choose **Pair Mac**, then scan the code. Treat this code as a private pairing credential.
 3. Add your OpenAI API key through **OpenAI Key…** in the Mac menu. It stays in `~/Library/Application Support/Googly/keys.json`, with private file permissions. It never goes to the phone or into this repository.
 4. Grant **Screen Recording** on Mac. If macOS requests it, quit and reopen Bluey after granting access. **Microphone** on iPhone enables voice; **Camera** is used only for QR pairing; **Local Network** lets the phone find the Mac. Accessibility is optional for the existing explicitly requested computer-control tools, and isn't needed for focus classification.
 5. Hold Bluey's face and describe the task, optionally giving a duration: “I'm making a Codex video for 30 minutes.” Release to start. The microphone captures while held and buffers the beginning in memory while the voice connection starts. Only held audio is sent; no spoken audio output is played. The default is 30 minutes, with a 1–240 minute range. You can also tap **Focus**, type a task, and start there.
@@ -99,6 +103,7 @@ The existing manual pointing, voice context, research cards, Codex controller an
 - `Shared/`: pairing transport, palette, focus state and deterministic nudge policy.
 - `Mac/`: menu bar app, screenshot classifier, nudge generator, timer and existing tools.
 - `iOS/`: face, voice input, QR pairing, synchronized controls and focus timelines.
+- `android/`: the same phone app for Android (Kotlin, Jetpack Compose). See [android/README.md](android/README.md).
 - `Tests/`: deterministic logic, lifecycle and secure transport tests.
 
 ## License

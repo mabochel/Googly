@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bluey: the blueberry with googly eyes, on the adaptive icon's 108 dp canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M55.20,30.00 L55.20,30.00 C71.11,30.00 84.00,43.04 84.00,59.12 L84.00,59.12 C84.00,71.76 71.64,82.00 56.40,82.00 L56.40,82.00 C38.51,82.00 24.00,72.22 24.00,60.16 L24.00,60.16 C24.00,43.50 37.97,30.00 55.20,30.00 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="39.00" android:startY="33.48" android:endX="69.00" android:endY="78.52">
+                <item android:offset="0" android:color="#FFA9BCFF" />
+                <item android:offset="0.34" android:color="#FF6C86F5" />
+                <item android:offset="0.68" android:color="#FF4254D6" />
+                <item android:offset="1" android:color="#FF2B2F8F" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#59FFFFFF" android:pathData="M34.80,35.00 a3.20,1.60 0 1,0 6.40,0 a3.20,1.60 0 1,0 -6.40,0 Z" />
+    <path android:fillColor="#FF1C1F66" android:pathData="M54.00,24.30 L55.20,26.70 L58.40,25.90 L56.00,28.30 L57.20,30.70 L54.00,29.10 L50.80,30.70 L52.00,28.30 L49.60,25.90 L52.80,26.70 Z" />
+    <path android:fillColor="#80F3A6D8" android:pathData="M32.30,61.00 a4.20,2.20 0 1,0 8.40,0 a4.20,2.20 0 1,0 -8.40,0 Z" />
+    <path android:fillColor="#80F3A6D8" android:pathData="M67.30,61.00 a4.20,2.20 0 1,0 8.40,0 a4.20,2.20 0 1,0 -8.40,0 Z" />
+    <path android:strokeColor="#FF1C1F66" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M39.5,40.5 Q44,37.6 48.5,40.5" />
+    <path android:strokeColor="#FF1C1F66" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M59.5,40.5 Q64,37.6 68.5,40.5" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M35.80,51.00 a8.20,8.20 0 1,0 16.40,0 a8.20,8.20 0 1,0 -16.40,0 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M55.80,51.00 a8.20,8.20 0 1,0 16.40,0 a8.20,8.20 0 1,0 -16.40,0 Z" />
+    <path android:fillColor="#FF17151F" android:pathData="M41.10,52.60 a4.10,4.10 0 1,0 8.20,0 a4.10,4.10 0 1,0 -8.20,0 Z" />
+    <path android:fillColor="#FF17151F" android:pathData="M61.10,52.60 a4.10,4.10 0 1,0 8.20,0 a4.10,4.10 0 1,0 -8.20,0 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M42.60,51.20 a1.30,1.30 0 1,0 2.60,0 a1.30,1.30 0 1,0 -2.60,0 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M62.60,51.20 a1.30,1.30 0 1,0 2.60,0 a1.30,1.30 0 1,0 -2.60,0 Z" />
+    <path android:fillColor="#FF1C1F66" android:pathData="M51.50,63.50 a3.00,2.10 0 1,0 6.00,0 a3.00,2.10 0 1,0 -6.00,0 Z" />
+</vector>
