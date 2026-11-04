@@ -25,8 +25,11 @@ If scanning doesn't work, scan the Mac's QR code with your camera app, copy the 
 ## Using it
 
 - Stand the phone sideways under your monitor. The app stays landscape and keeps the screen on.
-- **Double tap** his face to wake him or put him back to sleep. **Hold** his face and say the task ("I'm editing the video for 30 minutes"), then let go.
-- The top-right buttons open the chirp volume and Bluey's own screen (voice history, Mac choice). The bottom-left buttons pause, end and open focus sessions.
+- **Double tap** his face to wake him or put him back to sleep. **Hold** his face and ask for anything ("open Notes and type hello", "what's on my screen?"), then let go. Or tap the **keyboard** button and type it.
+- The top left shows what you asked, what he's doing ("Opening Notes…", "Typing…", "Done", or the Mac's error) and his reply. The ideas at the bottom right send a request when tapped.
+- Focus is optional: say what you're about to work on ("I'm editing the video for 30 minutes") or tap the **Focus** button. The timer, pause and end buttons only appear while a session runs.
+- The top-right buttons open the chirp volume and Bluey's own screen (voice history, Mac choice).
+- Every tool call and its result is logged: `adb logcat -s BlueyVoice`.
 - Leaving the app (home button, screen off) pauses focus monitoring and drops the link, like the iPhone app. Resuming is always manual.
 
 ## How it differs from the iPhone app
