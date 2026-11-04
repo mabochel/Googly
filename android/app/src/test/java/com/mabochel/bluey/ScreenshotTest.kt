@@ -25,6 +25,7 @@ import com.mabochel.bluey.ui.BlueyAppScreen
 import com.mabochel.bluey.ui.HudState
 import com.mabochel.bluey.ui.TypeSheet
 import com.mabochel.bluey.voice.LiveVoice
+import com.mabochel.bluey.voice.Modes
 import com.mabochel.bluey.ui.BlueyTheme
 import com.mabochel.bluey.ui.FaceAnimator
 import com.mabochel.bluey.ui.FaceView
@@ -148,6 +149,14 @@ class ScreenshotTest {
     @Test fun assistantDone() = assistant("10-assistant-done", HudState(connected = true,
         headline = "Open Notes and type hello from Bluey", status = "Done",
         reply = "Done. Hello from Bluey is in Notes.", voice = LiveVoice.State.Listening))
+
+    @Test fun frenchTutorMode() = assistant("12-mode-french", HudState(connected = true,
+        headline = "Explique mon écran", status = "Done", reply = "Ton écran montre Notes : « Bluey était là ». Très bien !",
+        voice = LiveVoice.State.Listening, mode = Modes.french))
+
+    @Test fun rateLimitRetry() = assistant("13-rate-limit", HudState(connected = true,
+        headline = "Open the Manulife chat in ChatGPT", status = "One sec, OpenAI asked me to slow down…",
+        voice = LiveVoice.State.Thinking))
 
     @Test fun typeSheet() {
         shot("11-type-sheet") { TypeSheet(send = {}, close = {}) }

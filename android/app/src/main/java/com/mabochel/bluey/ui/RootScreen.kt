@@ -141,6 +141,7 @@ fun RootScreen(model: BlueyModel, ui: RootUiState, scanQr: () -> Unit, pairText:
             onPair = { ui.showPairSheet = true },
             onSuggestion = { live.sendText(it.request) },
             onFocusCommand = { model.focus.command(it) },
+            onMode = { live.chooseMode(it) },
         )
         SoundButton(link, live)
         // Bluey's app: sessions, transcripts and settings.
