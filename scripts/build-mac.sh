@@ -3,7 +3,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release --product GooglyMac
+# Keep SwiftPM's build cache outside the project: when the project sits in an iCloud-synced folder
+# (Desktop or Documents), iCloud offloads cached modules and the compiler hangs waiting for them.
+SCRATCH="${BLUEY_BUILD_CACHE:-$HOME/Library/Caches/Bluey/swiftpm}"
+swift build -c release --product GooglyMac --scratch-path "$SCRATCH"
 
 # Assemble and sign outside the project: iCloud-synced folders (like Documents) attach Finder
 # info to the bundle, which codesign rejects. The signed app is then copied into build/.
@@ -11,7 +14,7 @@ FINAL="build/Bluey.app"
 STAGE=$(mktemp -d)
 APP="$STAGE/Bluey.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$(swift build -c release --show-bin-path)/GooglyMac" "$APP/Contents/MacOS/GooglyMac"
+cp "$(swift build -c release --scratch-path "$SCRATCH" --show-bin-path)/GooglyMac" "$APP/Contents/MacOS/GooglyMac"
 cp Mac/Info.plist "$APP/Contents/Info.plist"
 cp Shared/Fonts/*.ttf "$APP/Contents/Resources/"
 
