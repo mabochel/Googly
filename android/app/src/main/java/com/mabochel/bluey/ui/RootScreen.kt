@@ -111,6 +111,7 @@ class RootUiState {
     var showFocus by mutableStateOf(false)
     var showPairSheet by mutableStateOf(false)
     var showApp by mutableStateOf(false)
+    var showTyping by mutableStateOf(false)
     var showPairingIntro by mutableStateOf(true)
     var pairError by mutableStateOf("")
 }
@@ -133,7 +134,14 @@ fun RootScreen(model: BlueyModel, ui: RootUiState, scanQr: () -> Unit, pairText:
             ),
         )
         ModeIndicator(live.state)
-        FocusFaceHud(model, open = { ui.showFocus = true }, pair = { ui.showPairSheet = true })
+        AssistantHud(
+            hudState(model),
+            onType = { ui.showTyping = true },
+            onFocus = { ui.showFocus = true },
+            onPair = { ui.showPairSheet = true },
+            onSuggestion = { live.sendText(it.request) },
+            onFocusCommand = { model.focus.command(it) },
+        )
         SoundButton(link, live)
         // Bluey's app: sessions, transcripts and settings.
         RoundIcon(Icons.Filled.GridView, "Open Bluey", dim = true,
@@ -152,6 +160,10 @@ fun RootScreen(model: BlueyModel, ui: RootUiState, scanQr: () -> Unit, pairText:
         if (ui.showFocus) {
             BackHandler { ui.showFocus = false }
             FocusDashboard(model.focus, link) { ui.showFocus = false }
+        }
+        if (ui.showTyping) {
+            BackHandler { ui.showTyping = false }
+            TypeSheet(send = { live.sendText(it) }) { ui.showTyping = false }
         }
         if (ui.showPairSheet) {
             BackHandler { ui.showPairSheet = false }
@@ -238,90 +250,6 @@ fun RoundIcon(icon: ImageVector, label: String, modifier: Modifier = Modifier, d
     }
 }
 
-@Composable
-private fun FocusFaceHud(model: BlueyModel, open: () -> Unit, pair: () -> Unit) {
-    val focus = model.focus
-    val link = model.link
-    val live = model.live
-    val session = focus.current?.takeIf { !it.isEnded }
-    val feedback = focus.nudgeText.ifEmpty { live.feedback }
-    Box(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp)) {
-        Column(Modifier.align(Alignment.TopStart).widthIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(session?.task ?: "What's the mission?", style = fredoka(22.sp), color = Color.White, maxLines = 2,
-                overflow = TextOverflow.Ellipsis)
-            Text(hudStatus(model), style = plexMono(10.sp), color = Color.White.copy(alpha = 0.65f))
-            if (focus.developerMode) {
-                Text("Developer Mode · 4× clock · checks every 10s", style = plexMono(10.sp), color = Color.White.copy(alpha = 0.8f))
-            }
-            if (feedback.isNotEmpty()) {
-                Text(feedback, style = plexSans(12.sp), color = Color.White.copy(alpha = 0.85f), maxLines = 2,
-                    overflow = TextOverflow.Ellipsis)
-            }
-            if (live.state == LiveVoice.State.Asking) {
-                Box(Modifier.width((20 + live.inputLevel * 100).dp).height(3.dp).background(Color.White, CircleShape))
-            }
-        }
-        Row(Modifier.align(Alignment.BottomStart), horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            if (!link.connected) {
-                RoundIcon(Icons.Filled.QrCodeScanner, "Pair Mac", onClick = pair)
-            } else if (session != null) {
-                val running = session.isRunning
-                RoundIcon(if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    if (running) "Pause focus" else "Resume focus", enabled = focus.fresh) {
-                    focus.command(if (running) "focusPause" else "focusResume")
-                }
-                RoundIcon(Icons.Filled.Stop, "End focus", enabled = focus.fresh) { focus.command("focusEnd") }
-            }
-            RoundIcon(Icons.Filled.TrackChanges, "Focus sessions", onClick = open)
-            Box(Modifier.size(44.dp).semantics { contentDescription = voiceStatus(live.state) }, contentAlignment = Alignment.Center) {
-                Box(Modifier.size(34.dp).background(Color.White.copy(alpha = 0.07f), CircleShape))
-                Icon(voiceIcon(live.state), null, Modifier.size(18.dp),
-                    tint = if (live.state == LiveVoice.State.Asleep) Color.White.copy(alpha = 0.35f) else Color.White)
-            }
-        }
-        Text(
-            FocusSession.clock(session?.remaining ?: 1800.0),
-            Modifier.align(Alignment.BottomEnd).semantics { contentDescription = "Time remaining" },
-            style = TextStyle(fontFamily = BlueyFonts.fredoka, fontWeight = FontWeight.SemiBold, fontSize = 76.sp,
-                fontFeatureSettings = "tnum", color = Color.White),
-            maxLines = 1,
-        )
-    }
-}
-
-private fun hudStatus(model: BlueyModel): String {
-    if (!model.link.connected) return "Pair your Mac to focus together"
-    val session = model.focus.current?.takeIf { !it.isEnded } ?: return "Hold Bluey and describe a task"
-    if (!model.focus.fresh) return "Connection lost · monitoring will pause"
-    if (session.status == FocusSession.PAUSED) return "Paused"
-    val check = session.checks.lastOrNull { it.activity != FocusActivity.PAUSED } ?: return "Focusing together"
-    return when (check.activity) {
-        FocusActivity.OFF_TASK -> "Off task · ${check.probability.focusPercent()} estimate" + if (check.nudged) " · nudged" else ""
-        FocusActivity.ON_TASK -> "On task"
-        FocusActivity.UNCERTAIN -> "Not sure yet · checking again"
-        else -> "Last check unavailable · trying again"
-    }
-}
-
-private fun voiceIcon(state: LiveVoice.State) = when (state) {
-    LiveVoice.State.Asleep -> Icons.Filled.MicOff
-    LiveVoice.State.Waking -> Icons.Filled.Sync
-    LiveVoice.State.Listening -> Icons.Filled.Hearing
-    LiveVoice.State.Asking -> Icons.Filled.Mic
-    LiveVoice.State.Thinking -> Icons.Filled.MoreHoriz
-    LiveVoice.State.Speaking -> Icons.Filled.ChatBubble
-}
-
-private fun voiceStatus(state: LiveVoice.State) = when (state) {
-    LiveVoice.State.Asleep -> "Hold Bluey to speak"
-    LiveVoice.State.Waking -> "Voice connecting"
-    LiveVoice.State.Listening -> "Listening. Hold Bluey to ask"
-    LiveVoice.State.Asking -> "Recording your request"
-    LiveVoice.State.Thinking -> "Thinking"
-    LiveVoice.State.Speaking -> "Replying"
-}
-
 /** A tiny, quiet speaker button: chirp volume, a test hi, and which Mac to link with. */
 @Composable
 private fun SoundButton(link: MacLink, live: LiveVoice) {
@@ -402,7 +330,7 @@ private fun PairingIntro(paired: Boolean, onPair: () -> Unit) {
     ) {
         SleepyBlob(Modifier.width(220.dp).height(190.dp))
         Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.widthIn(max = 400.dp)) {
-            Text("Your little focus friend", style = fredoka(32.sp), color = Color(0xFFF4F1FA))
+            Text("Your little blueberry helper", style = fredoka(32.sp), color = Color(0xFFF4F1FA))
             Text(
                 if (paired) "Open Bluey on your Mac and keep this phone on the same Wi-Fi. We'll reconnect securely."
                 else "Open Bluey's Mac menu > Pair Phone (QR). Scan once, then we'll reconnect securely on the same Wi-Fi.",
