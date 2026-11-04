@@ -136,7 +136,10 @@ class LiveVoice(context: Context) {
 
     private fun afterPermission(granted: Boolean) {
         if (!granted) {
-            onCaption?.invoke("I need the microphone. Allow it for Bluey in Android Settings.", true)
+            feedback = "I need the microphone. Allow it for Bluey in Android Settings."
+            activity = feedback
+            pendingText = null // a typed request can't go out without a voice session
+            onCaption?.invoke(feedback, true)
             wantAwake = false
             moveTo(State.Asleep)
             return
@@ -291,15 +294,21 @@ class LiveVoice(context: Context) {
         lastRequest = words
         lastReply = ""
         activity = "Sending…"
-        Log.i(TAG, "typed request: $words")
-        if (state == State.Asleep) { wake(); return }
-        if (socketReady) flushText()
+        debug { "typed request (${words.length} chars)" }
+        when {
+            state == State.Asleep -> wake() // sent once the session is ready
+            !socketReady -> {} // sent on session.created
+            responseActive -> send(obj("type" to "response.cancel")) // sent once the cancelled reply is done
+            toolsRunning != 0 -> {} // sent once the running tools finish
+            else -> flushText()
+        }
     }
 
+    /** Sends the queued typed request, but only when nothing else is in flight (one response at a time). */
     private fun flushText() {
+        if (!socketReady || responseActive || toolsRunning != 0) return
         val words = pendingText ?: return
         pendingText = null
-        if (responseActive) send(obj("type" to "response.cancel"))
         val item = "typed-" + UUID.randomUUID()
         onUserTurn?.invoke(item, true)
         onUserWords?.invoke(item, words, true)
@@ -308,7 +317,8 @@ class LiveVoice(context: Context) {
 
     /** A request in words (transcribed or typed): the words, the neutral note, then a text-only reply. */
     private fun sendRequest(words: String) {
-        Log.i(TAG, "request: $words")
+        debug { "request: $words" }
+        lastReply = ""
         send(obj("type" to "conversation.item.create", "item" to message("user", words)))
         send(obj("type" to "conversation.item.create", "item" to message("system", Requests.NOTE)))
         send(obj("type" to "response.create",
@@ -376,6 +386,7 @@ class LiveVoice(context: Context) {
         socket = null
         socketReady = false
         feedback = "Voice reconnecting…"
+        activity = RECONNECTING
         responseActive = false
         toolsRunning = 0
         val requestToken = requestToken
@@ -417,8 +428,9 @@ class LiveVoice(context: Context) {
                 }
                 send(obj("type" to "input_audio_buffer.clear"))
                 turnAudio.connected().forEach(::appendAudio)
+                if (activity == RECONNECTING) activity = ""
                 if (askWhenReady) ask() else moveTo(if (holding) State.Asking else State.Listening)
-                if (pendingText != null) flushText()
+                flushText()
             }
 
             "response.created" -> {
@@ -476,18 +488,31 @@ class LiveVoice(context: Context) {
 
             "response.done" -> {
                 responseActive = false
+                val response = event["response"] as? JsonObject
+                when (response?.string("status")) {
+                    // Cut off by a newer request: its partial words and tool calls no longer apply.
+                    "cancelled" -> { debug { "response cancelled" }; finishIfQuiet(); return }
+                    "failed" -> {
+                        val details = (response?.get("status_details") as? JsonObject)?.get("error") as? JsonObject
+                        feedback = "Voice error: " + (details?.string("message") ?: "the reply failed").take(180)
+                        activity = feedback
+                        Log.w(TAG, "Realtime response failed: ${details?.string("code")}")
+                        finishIfQuiet(); return
+                    }
+                }
                 if (transcript.isNotEmpty()) {
                     onCaption?.invoke(transcript, true)
                     onReply?.invoke(transcript)
                     lastReply = transcript
                 }
-                val output = (event["response"] as? JsonObject)?.get("output") as? JsonArray ?: JsonArray(emptyList())
+                val output = response?.get("output") as? JsonArray ?: JsonArray(emptyList())
                 val calls = output.mapNotNull { it as? JsonObject }.filter { it.string("type") == "function_call" }
                 if (calls.isNotEmpty()) {
                     if (state != State.Speaking) moveTo(State.Thinking)
                     runTools(calls)
                 } else if (activity.endsWith("…")) {
-                    activity = "Done" // a failure message stays visible instead
+                    // A question back ("Shall I send it?") waits for you; a failure message stays visible instead.
+                    activity = if (transcript.trimEnd().endsWith("?")) "Waiting for your answer" else "Done"
                 }
                 finishIfQuiet()
             }
@@ -501,7 +526,9 @@ class LiveVoice(context: Context) {
                     moveTo(State.Listening)
                 }
                 val message = error?.string("message") ?: "Something went wrong."
-                Log.w(TAG, "Realtime error: $message")
+                Log.w(TAG, "Realtime error: $code")
+                // Cancelling a reply that had just finished is harmless: nothing to show.
+                if (code == "response_cancel_not_active") return
                 if (code != "input_audio_buffer_commit_empty") feedback = "Voice error: " + message.take(180)
                 activity = feedback
                 onCaption?.invoke(feedback, true)
@@ -518,13 +545,15 @@ class LiveVoice(context: Context) {
             val callID = call.string("call_id") ?: ""
             val arguments = call.string("arguments") ?: "{}"
             if (name == "go_to_sleep") sleepAfterReply = true
-            Log.i(TAG, "tool $name $arguments")
+            debug { "tool $name ${ToolActivity.redacted(arguments)}" }
             activity = ToolActivity.label(name, arguments)
+            val wake = generation
             val finish: (String, String?) -> Unit = finish@{ output, image ->
                 main.post {
-                    Log.i(TAG, "result $name: ${output.take(300)}")
+                    debug { "result $name: ${ToolActivity.logLine(name, output)}" }
+                    // A result from before he slept belongs to a session that's gone.
+                    if (socket == null || wake != generation) return@post
                     ToolActivity.failure(name, output)?.let { activity = it }
-                    if (socket == null) return@post
                     if (name.startsWith("focus_")) feedback = output
                     if (name == "web_research") {
                         val marker = "\n---REPORT---\n"
@@ -559,6 +588,7 @@ class LiveVoice(context: Context) {
         if (sleepAfterReply) { sleep(); return }
         if (state == State.Speaking || state == State.Thinking) moveTo(if (holding) State.Asking else State.Listening)
         deliverCodexNotes()
+        flushText() // a typed request that arrived while he was busy
     }
 
     // MARK: Audio
@@ -600,9 +630,18 @@ class LiveVoice(context: Context) {
     private fun message(role: String, text: String) = obj("type" to "message", "role" to role,
         "content" to JsonArray(listOf(obj("type" to "input_text", "text" to text))))
 
+    /**
+     * Detailed logs only when enabled: `adb shell setprop log.tag.BlueyVoice DEBUG`, then `adb logcat -s BlueyVoice`.
+     * They show your requests and which tools ran; text Bluey types, prompts and screen contents are never logged.
+     */
+    private inline fun debug(message: () -> String) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, message())
+    }
+
     companion object {
         const val MODEL = "gpt-realtime-2.1"
         private const val TAG = "BlueyVoice"
+        private const val RECONNECTING = "Reconnecting…"
     }
 }
 

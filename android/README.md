@@ -29,7 +29,7 @@ If scanning doesn't work, scan the Mac's QR code with your camera app, copy the 
 - The top left shows what you asked, what he's doing ("Opening Notes…", "Typing…", "Done", or the Mac's error) and his reply. The ideas at the bottom right send a request when tapped.
 - Focus is optional: say what you're about to work on ("I'm editing the video for 30 minutes") or tap the **Focus** button. The timer, pause and end buttons only appear while a session runs.
 - The top-right buttons open the chirp volume and Bluey's own screen (voice history, Mac choice).
-- Every tool call and its result is logged: `adb logcat -s BlueyVoice`.
+- To see what he does, turn on detailed logs with `adb shell setprop log.tag.BlueyVoice DEBUG`, then run `adb logcat -s BlueyVoice`. They show your requests and which tools ran and whether they failed; the text he types and what's on your screen are never logged. The setting resets when the phone restarts.
 - Leaving the app (home button, screen off) pauses focus monitoring and drops the link, like the iPhone app. Resuming is always manual.
 
 ## How it differs from the iPhone app

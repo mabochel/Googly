@@ -122,8 +122,8 @@ fun BlueyAppScreen(model: BlueyModel, openFocus: () -> Unit, pairMac: () -> Unit
                 Icon(if (asleep) Icons.Filled.PlayArrow else Icons.Filled.Stop, null, tint = Color.White)
                 Text(if (asleep) "Start listening" else "Stop listening", style = fredoka(18.sp), color = Color.White)
             }
-            Text(if (asleep) "He listens the whole session. Hold his face to ask something, let go and he answers."
-                 else "Listening. Hold his face to ask; use Focus sessions for the task and timer.",
+            Text(if (asleep) "Hold his face to ask for anything, let go and he does it. Or type it with the keyboard button."
+                 else "Listening. Hold his face to ask for anything; say what you're working on to start focus.",
                 style = plexSans(12.sp), color = Palette.inkSoft)
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

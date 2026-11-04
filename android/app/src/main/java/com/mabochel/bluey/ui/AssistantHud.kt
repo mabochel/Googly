@@ -6,11 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -76,6 +78,7 @@ data class HudState(
     val session: FocusSession? = null,
     val focusStatus: String = "",
     val focusFresh: Boolean = true,
+    val developerMode: Boolean = false,
 )
 
 fun hudState(model: BlueyModel): HudState {
@@ -91,10 +94,12 @@ fun hudState(model: BlueyModel): HudState {
         reply = live.lastReply,
         nudge = model.focus.nudgeText,
         voice = live.state,
-        inputLevel = live.inputLevel,
+        // Only read the mic level while it's shown, so the screen doesn't redraw at mic rate the rest of the time.
+        inputLevel = if (live.state == LiveVoice.State.Asking) live.inputLevel else 0.0,
         session = model.focus.current?.takeIf { !it.isEnded },
         focusStatus = focusStatus(model),
         focusFresh = model.focus.fresh,
+        developerMode = model.focus.developerMode,
     )
 }
 
@@ -113,11 +118,21 @@ fun AssistantHud(
 ) {
     val busy = state.voice == LiveVoice.State.Waking || state.voice == LiveVoice.State.Asking ||
         state.voice == LiveVoice.State.Thinking || state.voice == LiveVoice.State.Speaking
-    Box(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp)) {
+    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 18.dp)) {
+        // Ideas share the bottom edge with the buttons: show only as many as fit beside them.
+        val ideas = when {
+            maxWidth >= 760.dp -> 3
+            maxWidth >= 580.dp -> 2
+            else -> 1
+        }
         Column(Modifier.align(Alignment.TopStart).widthIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(state.headline, style = fredoka(22.sp), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(state.status, style = plexMono(10.sp), color = Color.White.copy(alpha = 0.7f), maxLines = 2,
                 overflow = TextOverflow.Ellipsis)
+            if (state.developerMode) {
+                Text("Developer Mode · 4× clock · checks every 10s", style = plexMono(10.sp),
+                    color = Color.White.copy(alpha = 0.8f))
+            }
             if (state.reply.isNotEmpty()) {
                 Text(state.reply, style = plexSans(13.sp), color = Color.White.copy(alpha = 0.9f), maxLines = 3,
                     overflow = TextOverflow.Ellipsis)
@@ -141,7 +156,7 @@ fun AssistantHud(
             FocusCorner(session, state.focusStatus, state.focusFresh, onFocusCommand, Modifier.align(Alignment.BottomEnd))
         } else if (state.connected && !busy) {
             Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (idea in Requests.suggestions) SuggestionChip(idea.label) { onSuggestion(idea) }
+                for (idea in Requests.suggestions.take(ideas)) SuggestionChip(idea.label) { onSuggestion(idea) }
             }
         }
     }
@@ -180,7 +195,7 @@ private fun SuggestionChip(label: String, onClick: () -> Unit) {
             .border(0.5.dp, Color.White.copy(alpha = 0.18f), shape).clickable(onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(label, style = plexSans(13.sp), color = Color.White, maxLines = 1) }
+    ) { Text(label, style = plexSans(13.sp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
 
 @Composable
@@ -205,7 +220,8 @@ fun TypeSheet(send: (String) -> Unit, close: () -> Unit) {
         }
     }
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f))
+        // The app draws edge to edge, so make room for the keyboard ourselves; the sheet stays centred above it.
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).imePadding()
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { close() },
         contentAlignment = Alignment.Center,
     ) {
