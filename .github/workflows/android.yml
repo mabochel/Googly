@@ -25,3 +25,12 @@ jobs:
         with:
           name: bluey-android-apk
           path: android/app/build/outputs/apk/release/app-release.apk
+      - name: Render screens
+        if: always()
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest -Pscreenshots --tests '*ScreenshotTest*'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bluey-android-screens
+          path: android/app/build/screenshots/

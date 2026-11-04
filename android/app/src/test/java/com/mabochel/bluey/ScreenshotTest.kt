@@ -20,7 +20,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.mabochel.bluey.link.FaceState
 import com.mabochel.bluey.link.Mood
+import com.mabochel.bluey.ui.AssistantHud
 import com.mabochel.bluey.ui.BlueyAppScreen
+import com.mabochel.bluey.ui.HudState
+import com.mabochel.bluey.ui.TypeSheet
+import com.mabochel.bluey.voice.LiveVoice
 import com.mabochel.bluey.ui.BlueyTheme
 import com.mabochel.bluey.ui.FaceAnimator
 import com.mabochel.bluey.ui.FaceView
@@ -122,5 +126,30 @@ class ScreenshotTest {
 
     @Test fun appScreen() {
         shot("07-app") { BlueyAppScreen(model, {}, {}, {}) }
+    }
+
+    private fun assistant(name: String, state: HudState) {
+        val animator = FaceAnimator().settle(FaceState(0.2, 0.1, "listening", 0.0))
+        shot(name) {
+            Box(Modifier.fillMaxSize()) {
+                FaceView(animator, Modifier.fillMaxSize())
+                AssistantHud(state, onType = {}, onFocus = {}, onPair = {}, onSuggestion = {}, onFocusCommand = {})
+            }
+        }
+    }
+
+    @Test fun assistantIdle() = assistant("08-assistant-idle", HudState(connected = true,
+        headline = "Hold Bluey or type to ask anything", status = "Listening. Hold Bluey to ask",
+        voice = LiveVoice.State.Listening))
+
+    @Test fun assistantWorking() = assistant("09-assistant-working", HudState(connected = true,
+        headline = "Open Notes and type hello from Bluey", status = "Typing…", voice = LiveVoice.State.Thinking))
+
+    @Test fun assistantDone() = assistant("10-assistant-done", HudState(connected = true,
+        headline = "Open Notes and type hello from Bluey", status = "Done",
+        reply = "Done. Hello from Bluey is in Notes.", voice = LiveVoice.State.Listening))
+
+    @Test fun typeSheet() {
+        shot("11-type-sheet") { TypeSheet(send = {}, close = {}) }
     }
 }
