@@ -18,8 +18,21 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+      # Sign with the project's own release key when its secrets are available (not on forks), so updates
+      # install over the existing app and keep its pairing. Without them the build falls back to the debug key.
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.BLUEY_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "No release key secret: signing with the debug key"; exit 0; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/bluey-release.p12"
+          echo "BLUEY_STOREFILE=$RUNNER_TEMP/bluey-release.p12" >> "$GITHUB_ENV"
       - name: Test and build
         working-directory: android
+        env:
+          BLUEY_STOREPASSWORD: ${{ secrets.BLUEY_STOREPASSWORD }}
+          BLUEY_KEYALIAS: ${{ secrets.BLUEY_KEYALIAS }}
+          BLUEY_KEYPASSWORD: ${{ secrets.BLUEY_KEYPASSWORD }}
         run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
       - uses: actions/upload-artifact@v4
         with:
