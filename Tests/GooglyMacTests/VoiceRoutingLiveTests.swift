@@ -322,6 +322,80 @@ final class VoiceRoutingLiveTests: XCTestCase {
     }
 
     /// Sends one held utterance (as text) to a fresh session; returns the tools called and any reply text.
+    /// The phone trims old screen reads: it deletes a big tool output and puts a one-line stub with the same
+    /// call_id right after the call. Checks Realtime accepts that (client ids, delete, previous_item_id) and keeps
+    /// replying without errors.
+    @MainActor func testTrimmedToolOutputsAreAccepted() async throws {
+        guard ProcessInfo.processInfo.environment["BLUEY_LIVE_VOICE_PROBE"] == "1" else {
+            throw XCTSkip("Live probe: set BLUEY_LIVE_VOICE_PROBE=1 to run it.")
+        }
+        let token = try await RealtimeHost.mintToken()
+        var request = URLRequest(url: URL(string: "wss://api.openai.com/v1/realtime?model=\(RealtimeHost.model)")!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let socket = URLSession.shared.webSocketTask(with: request)
+        socket.resume()
+        defer { socket.cancel(with: .normalClosure, reason: nil) }
+        func send(_ event: [String: Any]) async throws {
+            try await socket.send(.string(String(decoding: try JSONSerialization.data(withJSONObject: event), as: UTF8.self)))
+        }
+        func next() async throws -> [String: Any] {
+            var text = "{}"
+            switch try await socket.receive() {
+            case .string(let s): text = s
+            case .data(let d): text = String(decoding: d, as: UTF8.self)
+            @unknown default: break
+            }
+            return (try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]) ?? [:]
+        }
+        var errors: [String] = []
+        /// Reads events until response.done; collects errors on the way.
+        func untilDone() async throws -> [String: Any] {
+            let deadline = Date().addingTimeInterval(45)
+            while Date() < deadline {
+                let event = try await next()
+                if event["type"] as? String == "error" {
+                    let e = event["error"] as? [String: Any]
+                    errors.append("\(e?["code"] ?? "?"): \(e?["message"] ?? "") [\(e?["event_id"] ?? "")]")
+                }
+                if event["type"] as? String == "response.done" { return event["response"] as? [String: Any] ?? [:] }
+            }
+            throw NSError(domain: "VoiceProbe", code: 2, userInfo: [NSLocalizedDescriptionKey: "Timed out"])
+        }
+        func message(_ role: String, _ text: String) -> [String: Any] {
+            ["type": "message", "role": role, "content": [["type": "input_text", "text": text]]]
+        }
+        while try await next()["type"] as? String != "session.created" {}
+
+        // 1. A real tool call from the model.
+        try await send(["type": "conversation.item.create", "item": message("user", "What's on my screen?")])
+        try await send(["type": "response.create"])
+        let first = try await untilDone()
+        let call = (first["output"] as? [[String: Any]] ?? []).first { $0["type"] as? String == "function_call" }
+        let callItem = try XCTUnwrap(call?["id"] as? String, "model didn't call a tool")
+        let callID = try XCTUnwrap(call?["call_id"] as? String)
+
+        // 2. A big output with our own id, plus a screenshot-like user message with our own id.
+        let screen = "Frontmost app: Notes\n" + String(repeating: "L1 \"Some screen text\" @100,200\n", count: 120)
+        try await send(["type": "conversation.item.create",
+                        "item": ["id": "bprobeout1", "type": "function_call_output", "call_id": callID, "output": screen]])
+        try await send(["type": "conversation.item.create", "item": ["id": "bprobeimg1"] .merging(message("user", "(screenshot)")) { a, _ in a }])
+        try await send(["type": "response.create"])
+        _ = try await untilDone()
+
+        // 3. Trim: delete both, put a stub output right after the call, then keep talking.
+        try await send(["type": "conversation.item.delete", "item_id": "bprobeout1", "event_id": "del_probe1"])
+        try await send(["type": "conversation.item.delete", "item_id": "bprobeimg1", "event_id": "del_probe2"])
+        try await send(["type": "conversation.item.create", "previous_item_id": callItem,
+                        "item": ["id": "bprobestub1", "type": "function_call_output", "call_id": callID,
+                                 "output": "Looked at the screen: Notes was open. (Details removed to save space.)"]])
+        try await send(["type": "conversation.item.create", "item": message("user", "What did you just do? One short line.")])
+        try await send(["type": "response.create"])
+        let last = try await untilDone()
+        print("PROBE trim: status=\(last["status"] ?? "?"), errors=\(errors)")
+        XCTAssertEqual(last["status"] as? String, "completed")
+        XCTAssert(errors.isEmpty, "Realtime errors: \(errors)")
+    }
+
     @MainActor static func firstResponse(to words: String) async throws -> ([String], String) {
         let token = try await RealtimeHost.mintToken()
         var request = URLRequest(url: URL(string: "wss://api.openai.com/v1/realtime?model=\(RealtimeHost.model)")!)

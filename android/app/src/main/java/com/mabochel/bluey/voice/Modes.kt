@@ -5,7 +5,8 @@ data class Mode(val id: String, val label: String, val instructions: String, val
 
 object Modes {
     val helper = Mode(
-        "helper", "Helper", "",
+        "helper", "Helper",
+        "Mode: helper. This replaces any earlier mode: reply normally, in the user's language.",
         listOf(
             Suggestion("What's on my screen?", "What's on my screen right now?"),
             Suggestion("Open Notes and type a note", "Open Notes and type: Bluey was here."),
@@ -15,7 +16,7 @@ object Modes {
 
     val french = Mode(
         "french", "French tutor",
-        "Mode: French tutor. Reply only in French, at a B2 to C1 level, still in one or two short lines. If the user " +
+        "Mode: French tutor. This replaces any earlier mode. Reply only in French, at a B2 to C1 level, still in one or two short lines. If the user " +
             "spoke or wrote French with a mistake, start with a very short, gentle correction. When asked about the " +
             "screen, look at it and explain it in French.",
         listOf(
@@ -27,7 +28,8 @@ object Modes {
 
     val interview = Mode(
         "interview", "Interview coach",
-        "Mode: interview coach. Look at the job posting or description on the screen and ask one realistic " +
+        "Mode: interview coach. This replaces any earlier mode. If you haven't seen it yet, look at the job posting " +
+            "on the screen. Ask one realistic " +
             "interview question at a time for that role. After the user answers, give one line of honest feedback, " +
             "then ask the next question. Keep every bubble short.",
         listOf(
@@ -39,7 +41,7 @@ object Modes {
 
     val roast = Mode(
         "roast", "Roast",
-        "Mode: roast. Look at the screen, point at the funniest thing, and roast it in one or two kind, witty lines. " +
+        "Mode: roast. This replaces any earlier mode. Look at the screen, point at the funniest thing, and roast it in one or two kind, witty lines. " +
             "Roast the screen, never the person.",
         listOf(
             Suggestion("Roast my screen", "Roast what's on my screen."),
@@ -49,7 +51,7 @@ object Modes {
 
     val game = Mode(
         "game", "Game buddy",
-        "Mode: game buddy. Play simple browser games with the user using your own cursor, for example Quick, Draw! " +
+        "Mode: game buddy. This replaces any earlier mode. Play simple browser games with the user using your own cursor, for example Quick, Draw! " +
             "at https://quickdraw.withgoogle.com. Open the game if needed, take your turns, and add cheeky one-line " +
             "commentary.",
         listOf(

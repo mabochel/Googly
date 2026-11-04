@@ -84,6 +84,15 @@ class LiveVoice(context: Context) {
     private val trimmer = ContextTrimmer()
     private var rateLimitTries = 0
     private var retryPending = false
+    /** Bumped by anything that makes a scheduled rate-limit retry stale (a new request, a hold, sleep, reconnect). */
+    private var retryToken = 0
+    /** The system note sent with the last request; replaced (not piled up) by the next one. */
+    private var lastNoteID: String? = null
+
+    private fun cancelRetry() {
+        retryToken += 1
+        retryPending = false
+    }
     private val http = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(30, TimeUnit.SECONDS)
@@ -205,8 +214,9 @@ class LiveVoice(context: Context) {
         pendingText = null
         activity = ""
         trimmer.reset()
+        lastNoteID = null
         rateLimitTries = 0
-        retryPending = false
+        cancelRetry()
         toolsRunning = 0
         codexNotes.clear()
         moveTo(State.Asleep)
@@ -254,6 +264,7 @@ class LiveVoice(context: Context) {
 
     fun beginAsk() {
         holding = true
+        cancelRetry() // a new request replaces a reply waiting out a rate limit
         activity = ""
         lastRequest = ""
         lastReply = ""
@@ -311,6 +322,7 @@ class LiveVoice(context: Context) {
         lastRequest = words
         lastReply = ""
         activity = "Sending…"
+        cancelRetry() // a new request replaces a reply waiting out a rate limit
         debug { "typed request (${words.length} chars)" }
         when {
             state == State.Asleep -> wake() // sent once the session is ready
@@ -337,9 +349,14 @@ class LiveVoice(context: Context) {
         debug { "request (${mode.id}): $words" }
         lastReply = ""
         rateLimitTries = 0
-        retryPending = false
+        cancelRetry()
         send(obj("type" to "conversation.item.create", "item" to message("user", words)))
-        send(obj("type" to "conversation.item.create", "item" to message("system", Requests.note(mode))))
+        // One note at a time: the previous one (and its old mode's rules) would otherwise pile up and linger.
+        lastNoteID?.let { trim(listOf(ContextTrimmer.Action.Delete(it))) }
+        val noteID = newItemID()
+        lastNoteID = noteID
+        send(obj("type" to "conversation.item.create",
+            "item" to JsonObject(message("system", Requests.note(mode)) + ("id" to JsonPrimitive(noteID)))))
         send(obj("type" to "response.create",
             "response" to obj("output_modalities" to JsonArray(listOf(JsonPrimitive("text"))))))
         moveTo(State.Thinking)
@@ -409,7 +426,8 @@ class LiveVoice(context: Context) {
         responseActive = false
         toolsRunning = 0
         trimmer.reset() // the new session starts without the old items
-        retryPending = false
+        lastNoteID = null
+        cancelRetry()
         val requestToken = requestToken
         if (!wantAwake || requestToken == null) return
         reconnecting = true
@@ -519,6 +537,7 @@ class LiveVoice(context: Context) {
                             retryLater(details.string("message"))
                             return
                         }
+                        rateLimitTries = 0 // gave up; the next reply gets its own tries
                         feedback = "Voice error: " + (details?.string("message") ?: "the reply failed").take(180)
                         activity = feedback
                         Log.w(TAG, "Realtime response failed: ${details?.string("code")}")
@@ -526,7 +545,7 @@ class LiveVoice(context: Context) {
                     }
                 }
                 rateLimitTries = 0
-                retryPending = false
+                cancelRetry()
                 if (transcript.isNotEmpty()) {
                     onCaption?.invoke(transcript, true)
                     onReply?.invoke(transcript)
@@ -555,7 +574,7 @@ class LiveVoice(context: Context) {
                 val message = error?.string("message") ?: "Something went wrong."
                 Log.w(TAG, "Realtime error: $code")
                 // Trimming an item the server already dropped (e.g. after a reconnect) is harmless.
-                if (error?.string("event_id")?.startsWith(DELETE_EVENT) == true) return
+                if (error?.string("event_id")?.startsWith(TRIM_EVENT) == true) return
                 // Cancelling a reply that had just finished is harmless: nothing to show.
                 if (code == "response_cancel_not_active") return
                 if (code != "input_audio_buffer_commit_empty") feedback = "Voice error: " + message.take(180)
@@ -594,7 +613,8 @@ class LiveVoice(context: Context) {
                     val outputID = newItemID()
                     send(obj("type" to "conversation.item.create", "item" to obj("id" to outputID,
                         "type" to "function_call_output", "call_id" to callID, "output" to output)))
-                    round += ContextTrimmer.Item.Output(outputID, output.length, callItemID)
+                    round += ContextTrimmer.Item.Output(outputID, callItemID, callID,
+                        screen = ToolActivity.carriesScreen(name, output), stub = ToolActivity.stub(name, output))
                     if (image != null) images += image
                     remaining -= 1
                     if (remaining == 0) {
@@ -619,11 +639,20 @@ class LiveVoice(context: Context) {
         }
     }
 
-    private fun trim(itemIDs: List<String>) {
-        if (itemIDs.isNotEmpty()) debug { "trimming ${itemIDs.size} old items" }
-        for (id in itemIDs) {
-            send(obj("type" to "conversation.item.delete", "item_id" to id,
-                "event_id" to DELETE_EVENT + UUID.randomUUID().toString().replace("-", "").take(20)))
+    /** Applies the trimmer's plan: delete old screen items, and put a one-line stub after each trimmed call. */
+    private fun trim(actions: List<ContextTrimmer.Action>) {
+        if (actions.isNotEmpty()) debug { "trimming: ${actions.size} changes" }
+        for (action in actions) {
+            val eventID = TRIM_EVENT + UUID.randomUUID().toString().replace("-", "").take(20)
+            when (action) {
+                is ContextTrimmer.Action.Delete ->
+                    send(obj("type" to "conversation.item.delete", "item_id" to action.id, "event_id" to eventID))
+                is ContextTrimmer.Action.Stub ->
+                    send(obj("type" to "conversation.item.create", "event_id" to eventID,
+                        "previous_item_id" to action.afterItemId,
+                        "item" to obj("id" to newItemID(), "type" to "function_call_output",
+                            "call_id" to action.callId, "output" to action.text)))
+            }
         }
     }
 
@@ -631,17 +660,17 @@ class LiveVoice(context: Context) {
     private fun retryLater(message: String?) {
         val wait = RateLimit.delayMillis(message, rateLimitTries)
         rateLimitTries += 1
-        val attempt = rateLimitTries
+        retryToken += 1
+        val token = retryToken
+        val ws = socket
         retryPending = true
         activity = "One sec, OpenAI asked me to slow down…"
-        Log.w(TAG, "Realtime rate limited; retry $attempt in ${wait}ms")
-        val wake = generation
+        Log.w(TAG, "Realtime rate limited; retry $rateLimitTries in ${wait}ms")
         main.postDelayed({
-            // A new request (which resets the count) or a sleep since then makes this retry stale.
-            if (wake != generation || rateLimitTries != attempt) return@postDelayed
+            // A new request, a hold, sleep or a reconnect since then makes this retry stale.
+            if (token != retryToken) return@postDelayed
             retryPending = false
-            if (socket == null || !socketReady) return@postDelayed
-            if (responseActive) return@postDelayed // something else is already replying
+            if (socket !== ws || !socketReady || holding || responseActive) { finishIfQuiet(); return@postDelayed }
             send(obj("type" to "response.create"))
         }, wait)
     }
@@ -709,7 +738,7 @@ class LiveVoice(context: Context) {
         const val MODEL = "gpt-realtime-2.1"
         private const val TAG = "BlueyVoice"
         private const val RECONNECTING = "Reconnecting…"
-        private const val DELETE_EVENT = "del_"
+        private const val TRIM_EVENT = "trim_"
     }
 }
 

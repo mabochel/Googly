@@ -59,6 +59,18 @@ object ToolActivity {
         return problem?.take(200)
     }
 
+    /** Whether a tool result carries a screen read (look_at_screen, or an action followed by a fresh look). */
+    fun carriesScreen(name: String, output: String): Boolean =
+        name == "look_at_screen" || output.contains(SCREEN_MARKER)
+
+    /** What stays of a trimmed result: the outcome line, without the screen read. */
+    fun stub(name: String, output: String): String =
+        if (name == "look_at_screen" && !output.contains(SCREEN_MARKER)) {
+            "Looked at the screen. (Details removed to save space; look again if you need them.)"
+        } else {
+            output.substringBefore(SCREEN_MARKER).trim().take(200) + " (Screen details removed to save space.)"
+        }
+
     /** Tool arguments for the debug log, with typed text, prompts and questions replaced by their length. */
     fun redacted(arguments: String): String = runCatching {
         val args = BlueyJson.parseToJsonElement(arguments).jsonObject

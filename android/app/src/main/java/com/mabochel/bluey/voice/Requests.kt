@@ -13,11 +13,16 @@ object Requests {
         "them. Start a focus session only if they clearly say they are about to work on something themselves, or ask " +
         "to focus. Keep existing safety/personality instructions."
 
-    /** Long jobs go to Codex (the user's ChatGPT plan, no API cost); quick ones stay with Bluey's own cursor. */
-    const val CODEX_HINT = "For jobs that need many steps in other apps, documents or files (more than about five " +
-        "clicks), call codex_start with a complete prompt in the user's words instead of clicking through it " +
-        "yourself, reply in a few words, and tell the user when Codex finishes. Quick things (looking, pointing, a " +
-        "click or two, typing, opening an app or site) you do yourself."
+    /**
+     * Long jobs go to Codex (the user's ChatGPT plan, no API cost; it can see the screen and use apps too); quick
+     * ones stay with Bluey's own cursor. Codex runs with full access, so anything irreversible is confirmed first.
+     */
+    const val CODEX_HINT = "If you have the codex_start tool: for long jobs on documents, files or code, or anything " +
+        "needing many steps across other apps (more than about five actions), call codex_start with a complete prompt " +
+        "in the user's words, reply in a few words, and tell the user when Codex finishes. Before handing off anything " +
+        "that would send, post, delete, buy or submit something, ask the user first, and unless they explicitly asked " +
+        "for it, add \"Don't send, post, delete, buy or submit anything\" to the prompt. Games, pointing and quick " +
+        "things (looking, a few clicks, typing, opening an app or site) you do yourself."
 
     /** The note for a request in the given mode. */
     fun note(mode: Mode): String =
