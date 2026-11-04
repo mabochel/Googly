@@ -41,6 +41,15 @@ class LiveVoice(context: Context) {
         private set
     var inputLevel by mutableDoubleStateOf(0.0)
         private set
+    /** What Bluey is doing right now, or the last thing that went wrong. Shown under your request. */
+    var activity by mutableStateOf("")
+        private set
+    /** The last thing you asked, spoken or typed. */
+    var lastRequest by mutableStateOf("")
+        private set
+    /** His last reply (also shown in the bubble on the Mac). */
+    var lastReply by mutableStateOf("")
+        private set
 
     /** Asks the Mac for a short-lived key. Calls back with null on failure. */
     var requestToken: (((String?) -> Unit) -> Unit)? = null
@@ -93,6 +102,8 @@ class LiveVoice(context: Context) {
     private var sleepAfterReply = false
     private var holding = false
     private var askWhenReady = false
+    /** A typed request waiting for the voice session to be ready. */
+    private var pendingText: String? = null
     private var chirpedThisResponse = false
     private val askedItems = mutableSetOf<String>()
     private var awaitingQuestion = false
@@ -174,6 +185,8 @@ class LiveVoice(context: Context) {
         sleepAfterReply = false
         holding = false
         askWhenReady = false
+        pendingText = null
+        activity = ""
         toolsRunning = 0
         codexNotes.clear()
         moveTo(State.Asleep)
@@ -221,6 +234,9 @@ class LiveVoice(context: Context) {
 
     fun beginAsk() {
         holding = true
+        activity = ""
+        lastRequest = ""
+        lastReply = ""
         turnAudio.begin()
         awaitingTranscript = null
         waitingForCommit = false
@@ -263,6 +279,42 @@ class LiveVoice(context: Context) {
             onCaption?.invoke(feedback, true); moveTo(State.Listening)
         }, 15_000)
         // A response is only requested once this turn has a non-empty transcription.
+    }
+
+    // MARK: Typed requests
+
+    /** Sends a typed request, waking him first if needed. */
+    fun sendText(text: String) {
+        val words = text.trim()
+        if (words.isEmpty()) return
+        pendingText = words
+        lastRequest = words
+        lastReply = ""
+        activity = "Sending…"
+        Log.i(TAG, "typed request: $words")
+        if (state == State.Asleep) { wake(); return }
+        if (socketReady) flushText()
+    }
+
+    private fun flushText() {
+        val words = pendingText ?: return
+        pendingText = null
+        if (responseActive) send(obj("type" to "response.cancel"))
+        val item = "typed-" + UUID.randomUUID()
+        onUserTurn?.invoke(item, true)
+        onUserWords?.invoke(item, words, true)
+        sendRequest(words)
+    }
+
+    /** A request in words (transcribed or typed): the words, the neutral note, then a text-only reply. */
+    private fun sendRequest(words: String) {
+        Log.i(TAG, "request: $words")
+        send(obj("type" to "conversation.item.create", "item" to message("user", words)))
+        send(obj("type" to "conversation.item.create", "item" to message("system", Requests.NOTE)))
+        send(obj("type" to "response.create",
+            "response" to obj("output_modalities" to JsonArray(listOf(JsonPrimitive("text"))))))
+        moveTo(State.Thinking)
+        activity = "Thinking…"
     }
 
     // MARK: Connection
@@ -366,6 +418,7 @@ class LiveVoice(context: Context) {
                 send(obj("type" to "input_audio_buffer.clear"))
                 turnAudio.connected().forEach(::appendAudio)
                 if (askWhenReady) ask() else moveTo(if (holding) State.Asking else State.Listening)
+                if (pendingText != null) flushText()
             }
 
             "response.created" -> {
@@ -409,13 +462,8 @@ class LiveVoice(context: Context) {
                         feedback = "I didn't hear a task. Hold Bluey while you say it."
                         onCaption?.invoke(feedback, true); moveTo(State.Listening)
                     } else {
-                        send(obj("type" to "conversation.item.create", "item" to message("user", words)))
-                        send(obj("type" to "conversation.item.create", "item" to message("system",
-                            "The preceding words were explicitly spoken while holding Bluey. When they describe work, " +
-                                "call focus_start with task and optional minutes (default 30). Never merely say you're ready. " +
-                                "For questions use the appropriate tool. Keep existing safety/personality instructions.")))
-                        send(obj("type" to "response.create",
-                            "response" to obj("output_modalities" to JsonArray(listOf(JsonPrimitive("text"))))))
+                        lastRequest = words
+                        sendRequest(words)
                     }
                 }
             }
@@ -431,12 +479,15 @@ class LiveVoice(context: Context) {
                 if (transcript.isNotEmpty()) {
                     onCaption?.invoke(transcript, true)
                     onReply?.invoke(transcript)
+                    lastReply = transcript
                 }
                 val output = (event["response"] as? JsonObject)?.get("output") as? JsonArray ?: JsonArray(emptyList())
                 val calls = output.mapNotNull { it as? JsonObject }.filter { it.string("type") == "function_call" }
                 if (calls.isNotEmpty()) {
                     if (state != State.Speaking) moveTo(State.Thinking)
                     runTools(calls)
+                } else if (activity.endsWith("…")) {
+                    activity = "Done" // a failure message stays visible instead
                 }
                 finishIfQuiet()
             }
@@ -452,6 +503,7 @@ class LiveVoice(context: Context) {
                 val message = error?.string("message") ?: "Something went wrong."
                 Log.w(TAG, "Realtime error: $message")
                 if (code != "input_audio_buffer_commit_empty") feedback = "Voice error: " + message.take(180)
+                activity = feedback
                 onCaption?.invoke(feedback, true)
             }
         }
@@ -466,8 +518,12 @@ class LiveVoice(context: Context) {
             val callID = call.string("call_id") ?: ""
             val arguments = call.string("arguments") ?: "{}"
             if (name == "go_to_sleep") sleepAfterReply = true
+            Log.i(TAG, "tool $name $arguments")
+            activity = ToolActivity.label(name, arguments)
             val finish: (String, String?) -> Unit = finish@{ output, image ->
                 main.post {
+                    Log.i(TAG, "result $name: ${output.take(300)}")
+                    ToolActivity.failure(name, output)?.let { activity = it }
                     if (socket == null) return@post
                     if (name.startsWith("focus_")) feedback = output
                     if (name == "web_research") {
